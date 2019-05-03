@@ -3,20 +3,8 @@
 
 ## A Java-based `Matlab` class for progress monitoring during a `parfor` loop
 
-ppm = ParforProgMon(numIterations) constructs a ParforProgMon object.
-'numIterations' is an integer with the total number of
-iterations in the parfor loop.
-%
-ppm = ParforProgMon(numIterations, strWindowTitle) will additionally
-show 'strWindowTitle' in the title of the progressbar.
-
-ppm = ParforProgMon(numIterations, strWindowTitle, width, height) will
-change the window size of the progressbar with respect to width and
-height.
-
-
 ## Usage:
-
+```Matlab
 % Begin by creating a parallel pool.
 if isempty(gcp('nocreate'))
    parpool('local');
@@ -37,7 +25,21 @@ end
 
 % Delete the progress handle when the parfor loop is done.
 delete(ppm);
+```
 
+## Optional parameters
+```matlab
+ppm = ParforProgMon(numIterations) constructs a ParforProgMon object.
+'numIterations' is an integer with the total number of
+iterations in the parfor loop.
+
+ppm = ParforProgMon(numIterations, strWindowTitle) will additionally
+show 'strWindowTitle' in the title of the progressbar.
+
+ppm = ParforProgMon(numIterations, strWindowTitle, width, height) will
+change the window size of the progressbar with respect to width and
+height.
+```
 
 ## Changes to 60135-parfor-progress-monitor-progress-bar-v3:
 1. Automatic step size computation for very long parfor loops:
