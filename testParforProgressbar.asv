@@ -4,17 +4,17 @@
    end
 
    % 'numIterations' is an integer with the total number of iterations in the loop.
-   numIterations = 100000;
+   numIterations = 1000000;
 
    % Then construct a ParforProgMon object:
-   ppm = ParforProgMon(numIterations);
+   ppm = ParforProgressbar(numIterations,'showWorkerProgress',true,'progressBarUpdatePeriod',.1,'title','parfor progress'); 
 
    tic
    parfor i = 1:numIterations
       % do some parallel computation
-      pause(100/numIterations);
+      pause(300/numIterations);
       % increment counter to track progress
-      ppm.increment(i);
+      ppm.increment();
    end
    toc
    
