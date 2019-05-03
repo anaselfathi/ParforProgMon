@@ -34,7 +34,7 @@ ppm = ParforProgMon(numIterations) constructs a ParforProgMon object.
 iterations in the parfor loop.
 
 ppm = ParforProgMon(numIterations, strWindowTitle) will additionally
-show 'strWindowTitle' in the title of the progressbar.
+show a title in front of the progress title.
 
 ppm = ParforProgMon(numIterations, strWindowTitle, width, height) will
 change the window size of the progressbar with respect to width and
