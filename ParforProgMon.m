@@ -1,27 +1,40 @@
-% <strong>ParforProgMon</strong> - CLASS Progress monitor for `parfor` loops
+% PARFORPROGMON   Progress monitor for `parfor` loops
+%    ppm = PARFORPROGMON(numIterations) constructs a ParforProgMon object.
+%    'numIterations' is an integer with the total number of
+%    iterations in the parfor loop.
 %
-% <strong>Usage</strong>
-% Begin by creating a parallel pool.
+%    ppm = PARFORPROGMON(numIterations, strWindowTitle) will additionally
+%    show 'strWindowTitle' in the title of the progressbar.
+%    
+%    ppm = PARFORPROGMON(numIterations, strWindowTitle, width, height) will
+%    change the window size of the progressbar with respect to width and
+%    height.
 %
-% Then construct a <a href="matlab:help ParforProgMon">ParforProgMon</a> object:
-% ppm = <a href="matlab:help ParforProgMon">ParforProgMon</a>(strWindowTitle, nNumIterations <, nProgressStepSize, nWidth, nHeight, nMinIterations>);
 %
-% 'strWindowTitle' is a string containing the title of the progress bar
-% window. 'nNumIterations' is an integer with the total number of
-% iterations in the loop.
-%
-% <strong>Optional arguments</strong> 'nProgressStepSize' specifies how
-% many loop iterations should correspond to a single call to 'increment()'.
-% 'nWidth' and 'nHeight' specify the size of the progress window.
-%
-% <strong>Within the parfor loop</strong>
-% parfor (nIndex = 1:nNumIterations)
-%    if (mod(nIndex, nProgressStepSize) == 0)
-%       ppm.increment();
+%    <strong>Usage:</strong>
+%    % Begin by creating a parallel pool.
+%    if isempty(gcp('nocreate'))
+%       parpool('local');
 %    end
-% end
 %
-% Modified from <a href="https://www.mathworks.com/matlabcentral/fileexchange/31673-parfor-progress-monitor-v2">ParforProgMonv2</a>.
+%    % 'numIterations' is an integer with the total number of iterations in the loop.
+%    numIterations = 100000;
+%
+%    % Then construct a ParforProgMon object:
+%    ppm = ParforProgMon(numIterations);
+%
+%    parfor i = 1:numIterations
+%       % do some parallel computation
+%       pause(100/numIterations);
+%       % increment counter to track progress
+%       ppm.increment(i);
+%    end
+%
+%   % Delete the progress handle when the parfor loop is done.
+%   delete(ppm);
+%
+%
+% Modified from <a href="https://de.mathworks.com/matlabcentral/fileexchange/60135-parfor-progress-monitor-progress-bar-v3">ParforProgMonv3</a>.
 
 classdef ParforProgMon < handle
    
@@ -29,10 +42,13 @@ classdef ParforProgMon < handle
       Port
       HostName
       strAttachedFilesFolder
+      stepSize
+      totalSteps
    end
    
    properties (Transient, GetAccess = private, SetAccess = private)
       JavaBit
+      isWorker
    end
    
    methods ( Static )
@@ -42,33 +58,32 @@ classdef ParforProgMon < handle
          % Once we've been loaded, we need to reconstruct ourselves correctly as a
          % worker-side object.
          % fprintf('Worker: Starting with {%s, %f, %s}\n', X.HostName, X.Port, X.strAttachedFilesFolder);
-         o = ParforProgMon( {X.HostName, X.Port, X.strAttachedFilesFolder} );
+         o = ParforProgMon( {X.HostName, X.Port, X.strAttachedFilesFolder, X.stepSize, X.totalSteps} );
       end
    end
    
    methods
-      function o = ParforProgMon(strWindowTitle, nNumIterations, nProgressStepSize, nWidth, nHeight, nMinIterations)
+      function o = ParforProgMon( numIterations, varargin )
          % ParforProgMon - CONSTRUCTOR Create a ParforProgMon object
          % 
-         % Usage: ppm = ParforProgMon(strWindowTitle, nNumIterations <, nProgressStepSize, nWidth, nHeight>)
+         %    ppm = ParforProgMon(numIterations) constructs a progress
+         %    monitor for a parfor loop with 'numIterations' iterations.
+         %
+         %    Optional arguments:
+         %    ppm = ParforProgMon(numIterations, strWindowTitle) will show
+         %    the string in the progress bar during execution.
+         %
+         %    ppm = ParforProgMon(numIterations, strWindowTitle, width, height) 
+         %    changes the width and height of the progress bar appearance.
          % 
-         % 'strWindowTitle' is a string containing the title of the
-         % progress bar window. 'nNumIterations' is an integer with the
-         % total number of iterations in the loop. 'nProgressStepSize'
-         % indicates that one update (call to 'increment') corresponds to
-         % this many iterations. 'nWidth' indicates the width of the
-         % progress window. 'nHeight' indicates the width of the progress
-         % window.
-         
-         if (~exist('nMinIterations', 'var') || isempty(nMinIterations))
-            nMinIterations = 0;
-         end
          
          % - Are we a worker or a server?
-         if ((nargin == 1) && iscell(strWindowTitle))
+         if nargin == 1 && iscell(numIterations)
             % - Worker constructor
             % Get attached files
-            o.strAttachedFilesFolder = getAttachedFilesFolder(strWindowTitle{3});
+            o.strAttachedFilesFolder = getAttachedFilesFolder(numIterations{3});
+            o.stepSize = numIterations{4};
+            o.totalSteps = numIterations{5};
             % fprintf('Worker: Attached files folder on worker is [%s]\n', o.strAttachedFilesFolder);
                         
             % Add to java path
@@ -77,21 +92,24 @@ classdef ParforProgMon < handle
             warning(w);
             
             % "Private" constructor used on the workers
-            o.JavaBit   = ParforProgressMonitor.createWorker(strWindowTitle{1}, strWindowTitle{2});
+            o.JavaBit   = ParforProgressMonitor.createWorker(numIterations{1}, numIterations{2});
             o.Port      = [];
-            
-         elseif (nargin > 1) && (nNumIterations >= nMinIterations)
+%             o.it = 0;
+         else 
             % - Server constructor
-            % Check arguments
-            if (~exist('nProgressStepSize', 'var') || isempty(nProgressStepSize))
-               nProgressStepSize = 1;
-            end
-            
-            if (~exist('nWidth', 'var') || ~exist('nHeight', 'var') || isempty(nHeight) || isempty(nWidth))
-               nWidth = 400;
-               nHeight = 80;
-            end               
-            
+            defaultWindowTitle = '';
+            defaultHeight = 80;
+            defaultWidth = defaultHeight * 8;
+
+            p = inputParser;
+            validScalarPosNum = @(x) isnumeric(x) && isscalar(x) && (x > 0);
+            addRequired(p,'numIterations', validScalarPosNum );
+            addOptional(p,'strWindowTitle',defaultWindowTitle,@(x) ischar(x));
+            addOptional(p,'width',defaultWidth,validScalarPosNum);
+            addOptional(p,'height',defaultHeight,validScalarPosNum);
+ 
+            parse(p,numIterations,varargin{:});
+
             % Check for an existing pool
             pPool = gcp('nocreate');
             if (isempty(pPool))
@@ -114,8 +132,15 @@ classdef ParforProgMon < handle
                pPool.addAttachedFiles(o.strAttachedFilesFolder);
             end
             
+            if p.Results.numIterations > 200
+                progressStepSize = floor(p.Results.numIterations/100);
+            else
+                progressStepSize = 1;
+            end
+            o.stepSize = progressStepSize;
+            o.totalSteps = p.Results.numIterations;
             % Normal construction
-            o.JavaBit   = ParforProgressMonitor.createServer( strWindowTitle, nNumIterations, nProgressStepSize, nWidth, nHeight );
+            o.JavaBit   = ParforProgressMonitor.createServer( p.Results.strWindowTitle, p.Results.numIterations, progressStepSize, p.Results.width, p.Results.height );
             o.Port      = double( o.JavaBit.getPort() );
             % Get the client host name from pctconfig
             cfg         = pctconfig;
@@ -130,20 +155,20 @@ classdef ParforProgMon < handle
          X.Port     = o.Port;
          X.HostName = o.HostName;
          X.strAttachedFilesFolder = o.strAttachedFilesFolder;
+         X.stepSize = o.stepSize;
+         X.totalSteps = o.totalSteps;
       end
       
-      function increment( o )
+      function increment( o, i )
          % increment - METHOD Indicate that a single loop execution has finished
-         
-         % Update the UI
-         if (~isempty(o.JavaBit))
+         if  ~isempty(o.JavaBit) && (mod(i, o.stepSize) == 0 || i == o.totalSteps)
+            % Update the UI
             o.JavaBit.increment();
          end
       end
       
       function delete( o )
          % delete - METHOD Delete a ParforProgMon object
-         
          % - Make sure that any other threads that may have closed 
          %   the UI down have a chance to do it first
          pause(.01);
