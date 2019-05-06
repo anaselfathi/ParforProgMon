@@ -164,8 +164,9 @@ classdef ParforProgressbar < handle
                o.workerTable = table('Size',[pPool.NumWorkers, 4],'VariableTypes',{'uint64','string','uint32','logical'},'VariableNames',{'progress','ip','port','connected'});
                o.isWorker = false;
                
-               % Start an empty progressbar and the timer to update it
-               % periodically
+               % Open a progressbar with 0% progress and optionally
+               % initiallize also the progress of each worker with 0%.
+               % Also optionally, provide a title to the main progress
                if o.showWorkerProgress
                    titles = cell(pPool.NumWorkers + 1, 1);
                    if ~any(contains(p.UsingDefaults,'title'))
@@ -184,6 +185,7 @@ classdef ParforProgressbar < handle
                        progressbar;
                    end
                end
+               % Start a timer and update the progressbar periodically
                o.timer = timer('BusyMode','drop','ExecutionMode','fixedSpacing','StartDelay',p.Results.progressBarUpdatePeriod*2,'Period',p.Results.progressBarUpdatePeriod,'TimerFcn',{@draw_progress_bar, o});
                start(o.timer);
            end
@@ -263,7 +265,7 @@ end
 % the progress bar
 % if showWorkerProgress was set to true then the estimated progress of each
 % worker thread is displayed (assuming the workload is evenly split)
-function draw_progress_bar(timer, ~, o)
+function draw_progress_bar(~, ~, o)
     progressTotal = sum(o.workerTable.progress) / o.totalIterations;
     if(o.showWorkerProgress)
         numWorkers = sum(o.workerTable.connected);
@@ -273,9 +275,6 @@ function draw_progress_bar(timer, ~, o)
         progressbar(progressTotal, progWorkerC{:});
     else
         progressbar(progressTotal);
-        if progressTotal == 1.0
-            stop(timer);
-        end
     end
 end
 
