@@ -66,7 +66,7 @@ The server increments the counter just based on an established connection.
 This is quite fast but for very short loop cycles (like the above) it results in way too many connections.
 The original ParforProgMonv3 solves this by letting the user choose a stepSize manually. However, this is combersome and non-intuitive.
 This update calculates the stepsize automatically and thus maintains a very fast execution time even for very short loop cycles.
-4. Instead of tcp socket we use a udp socket whick is established on construction and not opened/closed at each loop cycle.
+4. Instead of tcp socket we use a udp socket which is established on construction and not opened/closed at each loop cycle.
 5. To track each worker progress, each worker sends its own progress to the server via udp.
 6. Small interface changes: I don't really care about the window title of the progress bar. This is now an optional parameter and now also properly monitored by matlab's input parser.
 
