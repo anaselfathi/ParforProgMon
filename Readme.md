@@ -14,7 +14,7 @@ if isempty(gcp('nocreate'))
 end
 
 % 'numIterations' is an integer with the total number of iterations in the loop. 
-# Feel free to increase this even higher and see other progress monitors fail.
+% Feel free to increase this even higher and see other progress monitors fail.
 numIterations = 100000;
 
 % Then construct a ParforProgressbar object:
