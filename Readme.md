@@ -46,17 +46,19 @@ update the progressbar every 1.5 second (default: 1.0 seconds).
 ppm = ParforProgressbar(___, 'title', 'my fancy title') will
 show 'my fancy title' on the progressbar).
 ```
+## How the worker progress is estimated
+Matlab's parfor loop schedules each worker on demand. I.e. if a worker finishes one loop cycle, another loop iteration is assigned to this worker. Because each loop cycle can vary in complexity, some workers can iterate much more cycles than others in the same time.
+ParforProgressbar doesn't get informed about this assignments and estimates the worker progress by evenly dividing the total iterations by the number of workers. This might lead to estimated individual worker progress higher than 100%.
 
 ## Benefits
 1. It's the first parfor progress monitor that also displays the remaining time.
-2. It's the first parfor progress monitor that also displays each workers progress.
+2. It's the first parfor progress monitor that also displays each workers progress. See [how the worker progress is estimated](#how-the-worker-progress-is-estimated) for details.
 3. It scales from very small number of iterations to arbitrarily high number of iterations with a very small footprint.
 
 ## Drawbacks
 1. It does slow down the computation. How much? It depends on how often you update the progressbar (on default every 1.0 seconds - but this is a parameter you can adjust). 
 Updating the progressbar on my computer takes 40ms on average. i.e. one of the x workers updates the progressbar (by default every second) and spends an additional 40ms every second = 4%.
 But you have x-1 workers that don't get delayed at all (calling increment has a neglegible effect even for millions of iterations).
-
 
 ### Difference to 60135-parfor-progress-monitor-progress-bar-v3:
 1. Using [progressbar](https://de.mathworks.com/matlabcentral/fileexchange/6922-progressbar) with it's nice drawing of the remaining time.
