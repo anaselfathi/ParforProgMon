@@ -1,8 +1,8 @@
    % Begin by creating a parallel pool.
-   if isempty(gcp('nocreate'))
-      parpool('local');
-   end
    p = gcp('nocreate');
+   if isempty(p)
+      p = parpool('local');
+   end
 
    % 'numIterations' is an integer with the total number of iterations in the loop.
    % Feel free to increase this even higher and see other progress monitors fail.
@@ -17,7 +17,7 @@
 %    ppm = ParforProgressbar(numIterations,'showWorkerProgress',true); 
    % Or maybe update the progressbar only every 3 seconds to save some time
    % and give the total progress a fany name.
-%    ppm = ParforProgressbar(numIterations,'showWorkerProgress',true,'progressBarUpdatePeriod',3,'title','my fancy parfor progress'); 
+%    ppm = ParforProgressbar(numIterations,'showWorkerProgress',true,'progressBarUpdatePeriod',3,'title','my fancy title'); 
 
    pauseTime = 120*p.NumWorkers/numIterations;
    

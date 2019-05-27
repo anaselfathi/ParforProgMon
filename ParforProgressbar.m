@@ -267,14 +267,16 @@ end
 % worker thread is displayed (assuming the workload is evenly split)
 function draw_progress_bar(~, ~, o)
     progressTotal = sum(o.workerTable.progress) / o.totalIterations;
-    if(o.showWorkerProgress)
-        numWorkers = sum(o.workerTable.connected);
-        EstWorkPerWorker = o.totalIterations / numWorkers;
-        progWorker = double(o.workerTable.progress) / EstWorkPerWorker;
-        progWorkerC = mat2cell(progWorker,ones(1,length(progWorker)));
-        progressbar(progressTotal, progWorkerC{:});
-    else
-        progressbar(progressTotal);
+    if progressTotal > 0
+        if(o.showWorkerProgress)
+            numWorkers = sum(o.workerTable.connected);
+            EstWorkPerWorker = o.totalIterations / numWorkers;
+            progWorker = double(o.workerTable.progress) / EstWorkPerWorker;
+            progWorkerC = mat2cell(progWorker,ones(1,length(progWorker)));
+            progressbar(progressTotal, progWorkerC{:});
+        else
+            progressbar(progressTotal);
+        end
     end
 end
 
