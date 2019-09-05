@@ -10,15 +10,17 @@
 %    update the progressbar every 1.5 second (default: 1.0 seconds).
 %
 %    ppm = ParforProgressbar(___, 'title', 'my fancy title') will
-%    show 'my fancy title' on the progressbar).
+%    show 'my fancy title' on the progressbar.
+%
+%    ppm = ParforProgressbar(___, 'parpool', 'local') will
+%    start the parallel pool (parpool) using the 'local' profile.
+%
+%    ppm = ParforProgressbar(___, 'parpool', {profilename, poolsize, Name, Value}) 
+%    will start the parallel pool (parpool) using the profilename profile with
+%    poolsize workers and any Name Value pair supported by function parpool.
 %
 %
 %    <strong>Usage:</strong>
-%    % Begin by creating a parallel pool.
-%    if isempty(gcp('nocreate'))
-%       parpool('local');
-%    end
-%
 %    % 'numIterations' is an integer with the total number of iterations in the loop.
 %    numIterations = 100000;
 %
@@ -29,7 +31,7 @@
 %       % do some parallel computation
 %       pause(100/numIterations);
 %       % increment counter to track progress
-%       ppm.increment(i);
+%       ppm.increment();
 %    end
 %
 %   % Delete the progress handle when the parfor loop is done.
@@ -53,29 +55,36 @@ classdef ParforProgressbar < handle
    % worker.
    properties (Transient, GetAccess = private, SetAccess = private)
        it uint64 % worker: iteration
-       workerID uint64 % worker: unique id for each worker
+       UserData % Anything the user wants to store temporarily in the worker
 
        workerTable % server: total progress with ip and port of each worker 
        showWorkerProgress logical% server: show not only total progress but also the estimated progress of each worker
        timer % server: timer object
+       progressTotalOld % server: Current total progress (float between 0 and 1).
 
        isWorker logical % server/worker: This identifies a worker/server
        connection % server/worker: udp connection
    end
 
+   properties (Transient, GetAccess = public, SetAccess = private)
+       workerID uint64 % worker: unique id for each worker
+   end
+
    methods ( Static )
       function o = loadobj( X )
+%          import libUtil.ParforProgressbar;
          % loadobj - METHOD Reconstruct a ParforProgressbar object
          
          % Once we've been loaded, we need to reconstruct ourselves correctly as a
          % worker-side object.
          debug('LoadObj');
-         o = ParforProgressbar( {X.ServerName, X.ServerPort, X.totalIterations, X.numWorkersPossible, X.stepSize} );
+         o = ParforProgressbar( {X.ServerName, X.ServerPort, X.totalIterations, X.numWorkersPossible, X.stepSize, X.UserData} );
       end
    end
    
    methods
        function o = ParforProgressbar( numIterations, varargin )
+%            import libUtil.progressbar;
            % ParforProgressbar - CONSTRUCTOR Create a ParforProgressbar object
            % 
            %    ppb = ParforProgressbar(numIterations)
@@ -91,6 +100,13 @@ classdef ParforProgressbar < handle
            %    ppm = ParforProgressbar(___, 'title', 'my fancy title') will
            %    show 'my fancy title' on the progressbar).
            %
+           %    ppm = ParforProgressbar(___, 'parpool', 'local') will
+           %    start the parallel pool (parpool) using the 'local' profile.
+           %
+           %    ppm = ParforProgressbar(___, 'parpool', {profilename, poolsize, Name, Value}) 
+           %    will start the parallel pool (parpool) using the profilename profile with
+           %    poolsize workers and any Name Value pair supported by function parpool.
+           %
            if iscell(numIterations) % worker
                debug('Start worker.');
                host = numIterations{1};
@@ -98,6 +114,7 @@ classdef ParforProgressbar < handle
                o.totalIterations = numIterations{3};
                o.numWorkersPossible = numIterations{4};
                o.stepSize = numIterations{5};
+               o.UserData = numIterations{6};
                o.ServerName = host;
                o.ServerPort = port;
                t = getCurrentTask(); 
@@ -120,20 +137,33 @@ classdef ParforProgressbar < handle
                showWorkerProgressDefault = false;
                progressBarUpdatePeriodDefault = 1.0;
                titleDefault = '';
+               poolDefault = '';
                
                validScalarPosNum = @(x) isnumeric(x) && isscalar(x) && (x > 0);
+               is_valid_profile = @(x) ischar(x) || iscell(x);
                addRequired(p,'numIterations', validScalarPosNum );
                addParameter(p,'showWorkerProgress', showWorkerProgressDefault, @isscalar);
                addParameter(p,'progressBarUpdatePeriod', progressBarUpdatePeriodDefault, validScalarPosNum);
                addParameter(p,'title',titleDefault,@ischar);
+               addParameter(p,'parpool',poolDefault,is_valid_profile)
                parse(p,numIterations, varargin{:});               
                o.showWorkerProgress = p.Results.showWorkerProgress;
                o.totalIterations = p.Results.numIterations;
+               o.progressTotalOld = 0;
+               ppool = p.Results.parpool;
                
                debug('Start server.');
                pPool = gcp('nocreate');   
                if isempty(pPool)
-                   error('ParforProgressbar:NeedPool', '*** ParforProgressbar: You must construct a pool before creating a ParforProgressbar object.');
+                   if isempty(ppool)
+                       pPool = parpool; % Create new parallel pool with standard setting
+                   elseif ischar(ppool)
+                       pPool = parpool(ppool); % Create parallel pool with given profilename
+                   elseif iscell(ppool)
+                       pPool = parpool(ppool{:}); % Create parallel pool with given input arguments.
+                   end
+               else
+                   % A parallel pool is still running. Let's keep it.
                end
                o.numWorkersPossible = pPool.NumWorkers;
                
@@ -188,6 +218,7 @@ classdef ParforProgressbar < handle
                % Start a timer and update the progressbar periodically
                o.timer = timer('BusyMode','drop','ExecutionMode','fixedSpacing','StartDelay',p.Results.progressBarUpdatePeriod*2,'Period',p.Results.progressBarUpdatePeriod,'TimerFcn',{@draw_progress_bar, o});
                start(o.timer);
+               o.UserData = {};
            end
        end
        
@@ -198,6 +229,7 @@ classdef ParforProgressbar < handle
            o.totalIterations = X.totalIterations;
            o.numWorkersPossible = X.numWorkersPossible;
            o.stepSize = X.stepSize;
+           o.UserData = X.UserData;
        end
        
        function delete( o )
@@ -213,7 +245,16 @@ classdef ParforProgressbar < handle
            end
        end
        
+       function UserData = getUserData( o )
+           UserData = o.UserData;
+       end
+
+       function setUserData( o, UserData )
+           o.UserData = UserData;
+       end
+
        function close( o )
+%            import libUtil.progressbar;
            % Close worker/server connection
            if isa(o.connection, 'udp')
                if strcmp(o.connection.Status, 'open')
@@ -266,8 +307,10 @@ end
 % if showWorkerProgress was set to true then the estimated progress of each
 % worker thread is displayed (assuming the workload is evenly split)
 function draw_progress_bar(~, ~, o)
+%     import libUtil.progressbar;
     progressTotal = sum(o.workerTable.progress) / o.totalIterations;
-    if progressTotal > 0
+    if progressTotal > o.progressTotalOld
+        o.progressTotalOld = progressTotal;
         if(o.showWorkerProgress)
             numWorkers = sum(o.workerTable.connected);
             EstWorkPerWorker = o.totalIterations / numWorkers;
@@ -281,7 +324,7 @@ function draw_progress_bar(~, ~, o)
 end
 
 % Workers within the parfor loop can sometimes display the commands using
-% printf or disp. However, if you start a timer or udp connection and whant
+% printf or disp. However, if you start a timer or udp connection and want
 % to display anything after an interrupt occured, it is simply impossible
 % to print anything. Unfortunately error messages also don't get shown...
 % I used this method to just print stuff to a file with the info about
