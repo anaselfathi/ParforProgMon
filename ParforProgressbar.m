@@ -107,6 +107,7 @@ classdef ParforProgressbar < handle
            %    will start the parallel pool (parpool) using the profilename profile with
            %    poolsize workers and any Name Value pair supported by function parpool.
            %
+           warning('off', 'instrument:udp:ClassToBeRemoved');
            if iscell(numIterations) % worker
                debug('Start worker.');
                host = numIterations{1};
